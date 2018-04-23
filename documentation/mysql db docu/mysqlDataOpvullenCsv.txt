@@ -1,0 +1,3 @@
+maak database 
+maak tables
+rechter muisknop op table -> data table import wizard
