@@ -20,21 +20,31 @@ import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
 import java.sql.SQLWarning;
 import java.sql.*;
+import java.text.DecimalFormat;
+import java.util.Iterator;
+import java.util.concurrent.TimeUnit;
 
 public class DomainController {
 
+    private Database database;
     private List<Query> queries;
     private Connection connection;
-   // private IDbConnection connection;
+    // private IDbConnection connection;
     private OperatingSystemMXBean osBean;
     private static final Logger LOGGER = Logger.getLogger(DomainController.class.getName());
     private final ThreadMXBean threadBean = ManagementFactory.getThreadMXBean();
-    private int amountOfExecutedQueries50 = 0;
-    private int amountOfExecutedQueries = 0;
-    private String csvHeader = "duration;cpuUser;cpuSystem\n";
-    private float totalCpuUser = -1;
-    private float totalCpuSystem = -1;
-    private float duration = -1;
+    private int mSSQLamountOfExecutedQueries50 = 0;
+    private int mySQLamountOfExecutedQueries50 = 0;
+    private int mSSQLamountOfExecutedQueries = 0;
+    private int mySQLamountOfExecutedQueries = 0;
+    private String csvHeader = "DBMS-duration;JavaSystem-Duration;DBMS-cpuDurationUser;JavaCPU-Duration\n";
+    private float totalCpuUser = 0;
+    private float totalCpuSystem = 0;
+    private float duration = 0;
+    long startTime = 0;
+    long stopTime = 0;
+    long elapsedTime = 0;
+    long elapsedCpuTime = 0;
 
     public DomainController() {
         queries = new ArrayList<>();
@@ -67,10 +77,21 @@ public class DomainController {
 
     public void connectToDatabase(Database database, boolean windowsAuth, String serverName, String serverAddress, String username, String password)
             throws SQLException {
+        this.database = database;
         if (database == Database.MySQL) {
             connectToMySQLDatabase(serverName, serverAddress, username, password);
         } else {
             connectToSQLServerDatabase(windowsAuth, serverName, serverAddress, username, password);
+        }
+    }
+
+    public void disconnectFromDatabas() {
+        try {
+            if (connection != null) {
+                connection.close();
+            }
+        } catch (SQLException ex) {
+            Logger.getLogger(DomainController.class.getName()).log(Level.SEVERE, null, ex);
         }
     }
 
@@ -115,18 +136,20 @@ public class DomainController {
         }
     }
 
-    public File makeCsvFileWithResults(Database db, Query query, int amount) {
+    public File makeCsvFileWithResults(Query query, int amount) {
         LOGGER.fine(query.getQueryString());
-        String database = db.name();
-        File file = new File(database + "_" + query.getName().replaceAll("\\s+", "") + "_" + amount + ".csv");
+        File file = new File(database.name() + "_" + query.getName().replaceAll("\\s+", "") + "_" + amount + ".csv");
         try {
-            if (file.exists()) {
+            while (!file.createNewFile()) {
                 String fileName = file.getName();
-                String fileNumber = amount == 50 ? Integer.toString(++amountOfExecutedQueries50)
-                        : Integer.toString(++amountOfExecutedQueries);
-                file.renameTo(new File(fileName.substring(0, fileName.length() - 4) + "(" + fileNumber + ")" + ".csv"));
+                int amount2 = 0;
+                if (database.name().equalsIgnoreCase("MySQL")) {
+                    amount2 = amount == 50 ? ++mySQLamountOfExecutedQueries50 : ++mySQLamountOfExecutedQueries;
+                } else {
+                    amount2 = amount == 50 ? ++mSSQLamountOfExecutedQueries50 : ++mSSQLamountOfExecutedQueries;
+                }
+                file.renameTo(new File(fileName.substring(0, fileName.length() - 4) + "(" + amount2 + ")" + ".csv"));
             }
-            file.createNewFile();
             file.setWritable(true);
         } catch (IOException ex) {
             LOGGER.log(Level.SEVERE, null, ex);
@@ -135,7 +158,7 @@ public class DomainController {
     }
 
     public void executeMSSQLQuery(Query query, int amount) {
-        File file = makeCsvFileWithResults(Database.MySQL, query, amount);
+        File file = makeCsvFileWithResults(query, amount);
         try (Formatter format = new Formatter(file)) {
             format.format(csvHeader);
 
@@ -143,34 +166,52 @@ public class DomainController {
                 try {
                     Statement statement = connection.createStatement();
                     System.out.println(query.getQueryString());
-                    // ResultSet resultSet = statement.executeQuery("SET STATISTICS TIME ON " + query.getQueryString() + " SET STATISTICS TIME OFF");
-                    statement.execute("SET STATISTICS TIME ON");
-                    ResultSet resultSet = statement.executeQuery(query.getQueryString());
-//            Statement st = resultSet.getStatement();
-//            while (st.getMoreResults()) {
-//                SQLWarning warning = st.getWarnings();
-//
-//                while (warning != null) {
-//                    System.out.println(warning.getMessage());
-//                    warning = warning.getNextWarning();
-//                }
-//            }
-                    while (resultSet.next()) {
-                        //System.out.println(resultSet.getString(3));
-                        SQLWarning warning = resultSet.getWarnings();
-                        if (warning != null) {
-                            System.out.println(warning.getMessage());
-                        }
-                        while (warning != null) {
-                            System.out.println(warning.getMessage());
-                            warning = warning.getNextWarning();
-                        }
-//                ResultSet rs = resultSet.getStatement().getResultSet();
-//                while (rs.next()) {
-//                    warning = rs.getWarnings();
-                    }
-                    statement.execute("SET STATISTICS TIME OFF");
-                    format.format("%s;%s;%s%n", Float.toString(duration), Float.toString(totalCpuUser), Float.toString(totalCpuSystem));
+
+                    ResultSet resultSet = statement.executeQuery("SET STATISTICS TIME ON " + query.getQueryString() + " SET STATISTICS TIME OFF");
+
+//                    while (statement.getMoreResults()) {
+                    //SQLWarning warning = statement.getWarnings();
+                    //
+                    //while (warning != null)
+                    //{
+                    //   System.out.println(warning.getMessage());
+                    //   warning = warning.getNextWarning();
+                    //  }
+//                        Iterator<Throwable> iterator = statement.getWarnings().iterator();
+//                        while (iterator.hasNext()) {
+//                            System.out.println(iterator.next().getMessage());
+//                        }
+//                        System.out.println(statement.getWarnings().getMessage());
+//                    }
+                    //getting some data from the resultset
+                    resultSet.next();
+                    System.out.println(resultSet.getString(2));
+                    //getting the cpu, ram and duration in ms from the "comments tab in mssql"
+                    statement.getMoreResults();
+                    String statistics = statement.getWarnings().getMessage();
+                    System.out.printf("%s%n", statistics);
+
+                    String durationString = statistics.substring(statistics.indexOf("elapsed"));
+                    String cpuTimeString = statistics.substring(statistics.indexOf("CPU"), statistics.indexOf("elapsed"));
+                    totalCpuUser = Integer.parseInt(cpuTimeString.replaceAll("[\\D]", ""));
+                    duration = Integer.parseInt(durationString.replaceAll("[\\D]", ""));
+                    System.out.printf("Duration in ms: %f%n", duration);
+                    System.out.printf("CPU time in ms: %f%n", totalCpuUser);
+
+                    //java system duration                     
+                    startTime = System.nanoTime();
+                    statement.executeQuery(query.getQueryString());
+                    stopTime = System.currentTimeMillis();
+                    elapsedTime = stopTime - startTime;
+
+                    //java cpu duration
+                    startTime = threadBean.getCurrentThreadCpuTime();
+                    statement.executeQuery(query.getQueryString());
+                    stopTime = threadBean.getCurrentThreadCpuTime();
+                    elapsedCpuTime = stopTime - startTime;
+
+                    format.format("%s;%s;%s;%s%n", duration, elapsedTime,
+                            Float.toString(totalCpuUser), elapsedCpuTime);
                 } catch (SQLException ex) {
                     LOGGER.log(Level.SEVERE, null, ex);
                 }
@@ -188,7 +229,7 @@ public class DomainController {
      * @param amount
      */
     public void executeMySQLQuery(Query query, int amount) {
-        File file = makeCsvFileWithResults(Database.MSSQL, query, amount);
+        File file = makeCsvFileWithResults(query, amount);
         try (Formatter format = new Formatter(file)) {
             format.format(csvHeader);
             for (int i = 0; i < amount; i++) {
@@ -200,7 +241,11 @@ public class DomainController {
                     statement.execute("SET PROFILING=1;");
 
                     //uitvoeren van query
+                    startTime = System.nanoTime();
                     statement.executeQuery(query.getQueryString());
+                    stopTime = System.currentTimeMillis();
+
+                    elapsedTime = stopTime - startTime;
 
                     //ophalen van de duration van de query
                     ResultSet resultSet = statement.executeQuery("SHOW PROFILES;");
@@ -221,10 +266,8 @@ public class DomainController {
                     String cpuQuery = "SHOW PROFILE CPU FOR QUERY " + Query_ID + ";";
                     LOGGER.log(Level.INFO, cpuQuery);
                     ResultSet resultSetCPU = statement.executeQuery(cpuQuery);
-                    while (resultSetCPU.next()) {
-
+                    while (/*!resultSetCPU.isClosed() &&*/resultSetCPU.next()) {
                         String CPU_status = resultSetCPU.getString("Status");
-
                         float cpuUser = resultSetCPU.getFloat("CPU_user");
                         String CPU_user = Float.toString(cpuUser);
 
@@ -233,54 +276,37 @@ public class DomainController {
 
                         float cpuDuration = resultSetCPU.getFloat("Duration");
                         String CPUduration = Float.toString(cpuDuration);
+                        System.out.printf("Duration: %f CPU User: %f CPU System: %f Status: %s%n",
+                                cpuDuration, cpuUser, cpuSystem, CPU_status);
 
                         totalCpuDuration += cpuDuration;
                         totalCpuUser += cpuUser;
                         totalCpuSystem += cpuSystem;
-                        System.out.printf("Duration: %f CPU User: %f CPU System: %f%n", totalCpuDuration, totalCpuUser, totalCpuSystem);
-                        System.out.printf("%s%n", duration);
-
-                        //formatting data naar .csv row
-                        format.format("%s;%s;%s%n", Float.toString(duration), Float.toString(totalCpuUser), Float.toString(totalCpuSystem));
-
-                        //Profiling in MySQL uitzetten.
-                        statement.execute("SET PROFILING=0;");
+                        System.out.printf("TOTAL Duration: %f CPU User: %f CPU System: %f%n", totalCpuDuration, totalCpuUser, totalCpuSystem);
                     }
+                    statement.execute("SET PROFILING=0;");
+
+                    System.out.printf("Duration via \" show profiles\": %s%n", duration);
+
+                    //cpu duration 
+                    startTime = threadBean.getCurrentThreadCpuTime();
+                    statement.executeQuery(query.getQueryString());
+                    stopTime = threadBean.getCurrentThreadCpuTime();
+                    elapsedCpuTime = stopTime - startTime;
+
+                    System.out.println(elapsedTime);
+                    //formatting data naar .csv row
+                    format.format("%s;%s;%s;%s%n", Float.toString(duration), elapsedTime, Float.toString(totalCpuUser), elapsedCpuTime);
+
+                    //Profiling in MySQL uitzetten.
                 } catch (SQLException ex) {
                     Logger.getLogger(DomainController.class
                             .getName()).log(Level.SEVERE, null, ex);
                 }
             }
         } catch (FileNotFoundException ex) {
-            Logger.getLogger(DomainController.class.getName()).log(Level.SEVERE, null, ex);
+            Logger.getLogger(DomainController.class
+                    .getName()).log(Level.SEVERE, null, ex);
         }
-    }
-
-    public void OudeCode() {
-        long startTime = System.currentTimeMillis();
-//per query: hoe lang duurt dat (nu niet juist)
-        //
-        //System.nanoTime() <-- dit is echt de duur
-        //hoeveel CPU heeft de query gebruikt. <-- 
-        //1 thread --> locked,  
-        long start = threadBean.getCurrentThreadCpuTime();
-        // **** <-- als je CPU % wil doen dan moet je in een aparte thread CPU lezen
-        // statement.executeQuery("SHOW PROFILE CPU FOR QUERY 2;")
-        //TODO: of een statement in mysql die per query op dbperf database (after en before query)
-        /* de profiling en vervolgens show gegevens in een bestand stopt 
-                OF in java de statement maken om dit te doen.
-        #SET profiling = 1;
-        #select * from dbperf.category
-            #SHOW PROFILES;
-            SHOW PROFILE CPU FOR QUERY 5;*/
-        // **** <--
-        long finish = threadBean.getCurrentThreadCpuTime();
-        long stopTime = System.currentTimeMillis();
-
-        long elapsedTime = stopTime - startTime;
-        long elapsedCpuTime = finish - start;
-
-        double cpuUsage = osBean.getSystemCpuLoad();
-        double ramUsage = osBean.getTotalPhysicalMemorySize() - osBean.getFreePhysicalMemorySize();
     }
 }

@@ -1,1 +1,2 @@
-duration;cpuUser;cpuSystem
+DBMS-duration;JavaSystem-Duration;DBMS-cpuDurationUser;JavaCPU-Duration
+3.0;-490322112050710;0.0;15625000

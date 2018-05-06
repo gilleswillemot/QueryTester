@@ -88,6 +88,7 @@ public class MainGuiController extends AnchorPane implements Initializable {
         this.connectButton.setOnAction(e -> {
             //TODO surround with while, for letting the user keep trying to connect with other parameters.
             try {
+                System.out.println(database.name());
                 domainController.connectToDatabase(database, windowsAuthCheckbox.isSelected(), servnameTextfield.getText(), serverAdressTextfield.getText(),
                         usernameTextField.getText(), passwordTextfield.getText());
                 execButton.setVisible(true);
@@ -138,6 +139,7 @@ public class MainGuiController extends AnchorPane implements Initializable {
 //            System.out.println(change);
 //        });
         databaseChoice.setOnAction(value -> {
+            domainController.disconnectFromDatabas();
             database = Database.valueOf(databaseChoice.getSelectionModel().getSelectedItem());
             System.out.println(database.name());
             execButton.setVisible(false);

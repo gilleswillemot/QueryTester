@@ -1,0 +1,25 @@
+Steps for MSSQL connection to work:
+
+1. add sqljdbc 6.4 jre8 jar to project
+2. add sqlserverjdbc.jr to project
+3. Make sure TCP/IP port of sql server is 1433:
+To open SQL Server Configuration Manager, in the Search charm, under Apps, type:
+
+SQLServerManager14.msc for [SQL Server 2017] or
+
+SQLServerManager13.msc for [SQL Server 2016] or
+
+SQLServerManager12.msc for [SQL Server 2014] or
+
+SQLServerManager11.msc for [SQL Server 2012] or
+
+SQLServerManager10.msc for [SQL Server 2008]
+
+in sql server manager -> Click SQL Server Configuration Manager ->Expand SQL Server Network Configuration-> Protocol ->Enable TCP/IP Right box
+
+Double Click on TCP/IP and go to IP Adresses Tap and Put port 1433 under TCP port.
+
+4. copy the sqljdbc_auth.dll (part of the sqljdbc 6.4 folder, where you found the jar, downloadable via windows website) to C:\Program Files\Java\jre_Version\bin 
+ Finally restart IDE (e.g. netbeans)
+
+5. In sql server management studio, check the Authentication (if windows -> edit the connectionstring in java to add the ";integratedSecurity=true" option)
